@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Switch">
+<meta name="apple-mobile-web-app-title" content="Switch"><meta name="theme-color" content="#cce0f8"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" type="image/png" href="icon-192.png">
 <title>Switch</title>
 <meta name="color-scheme" content="light"><link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Libre+Caslon+Text:ital,wght@1,400&family=Pinyon+Script&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -278,7 +278,7 @@ const keep=s=>{sess=s;try{s?localStorage.setItem(SK,JSON.stringify(s)):localStor
 const mk=r=>({access_token:r.access_token,refresh_token:r.refresh_token,expires_at:Date.now()+(r.expires_in||3600)*1000-60000,uid:r.user.id,email:r.user.email});
 async function tok(){if(!sess)return null;if(Date.now()<sess.expires_at)return sess.access_token;const r=await fetch(U+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:H(),body:JSON.stringify({refresh_token:sess.refresh_token})});if(!r.ok){keep(null);draw();return null}keep(mk(await r.json()));return sess.access_token}
 async function push(){const t=await tok();if(!t)return;const r=await fetch(U+'/rest/v1/dados?on_conflict=user_id',{method:'POST',headers:{...H(t),Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:sess.uid,conteudo:S,atualizado_em:new Date().toISOString()})});sync=r.ok?'sincronizado ✓':'erro ao sincronizar'}
-async function pull(){const t=await tok();if(!t)return;try{sync='sincronizando…';const r=await fetch(U+'/rest/v1/dados?select=conteudo&user_id=eq.'+sess.uid,{headers:H(t)});if(!r.ok)throw 0;const d=await r.json();if(d.length&&d[0].conteudo&&(d[0].conteudo._t||0)>(S._t||0)){Object.assign(S,d[0].conteudo);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}sync='sincronizado ✓'}else await push()}catch(e){sync='sem conexão com a nuvem'}draw()}
+async function pull(){let t;try{t=await tok()}catch(e){sync='sem conexão com a nuvem';draw();return}if(!t)return;try{sync='sincronizando…';const r=await fetch(U+'/rest/v1/dados?select=conteudo&user_id=eq.'+sess.uid,{headers:H(t)});if(!r.ok)throw 0;const d=await r.json();if(d.length&&d[0].conteudo&&(d[0].conteudo._t||0)>(S._t||0)){Object.assign(S,d[0].conteudo);try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}sync='sincronizado ✓'}else await push()}catch(e){sync='sem conexão com a nuvem'}draw()}
 window.cloudPush=()=>{if(!sess)return;clearTimeout(pt);pt=setTimeout(()=>push().then(()=>{const el=$('sy');if(el)el.textContent=sync}).catch(()=>{}),1500)};
 V.auth=()=>`<h1 class="logo" data-t="Switch">Switch</h1><p class="mut" style="text-align:center">Entre para guardar tudo na nuvem e abrir em qualquer aparelho.</p><div class="card"><label>E-mail</label><input id="ae" type="email" autocomplete="email" value="${esc(lastEm)}"><label>Senha</label><input id="ap" type="password" autocomplete="current-password" placeholder="mínimo 6 caracteres"><div class="row"><button data-a="lg">Entrar</button><button class="o" data-a="sg">Criar conta</button></div>${msg?`<p style="color:var(--red)">${esc(msg)}</p>`:''}</div><button class="g" data-a="gu" style="text-transform:none;width:100%">Continuar sem conta (só neste aparelho)</button>`;
 const _sv=V.salvar;V.salvar=()=>{const s=_sv(),i=s.indexOf('</p>')+4,c=sess?`<div class="card"><label>Conta</label><p>${esc(sess.email)}</p><p class="mut">Nuvem: <span id="sy">${esc(sync||'—')}</span></p><div class="row"><button data-a="sync">Sincronizar agora</button><button class="o" data-a="out">Sair</button></div></div>`:`<div class="card"><p class="mut">Você está usando sem conta. Os dados ficam só neste aparelho.</p><button data-a="outg">Entrar ou criar conta</button></div>`;return s.slice(0,i)+c+s.slice(i)};
@@ -296,6 +296,13 @@ if(ok&&d.access_token){keep(mk(d));guest=false;try{localStorage.removeItem(GK)}c
 msg=ok?'Conta criada! Confirme pelo e-mail que enviamos e depois toque em Entrar.':(d.error_code=='invalid_credentials'?'E-mail ou senha incorretos.':d.error_code=='user_already_exists'?'Este e-mail já tem conta. Toque em Entrar.':d.error_code=='weak_password'?'Senha fraca. Use uma senha maior.':(d.msg||d.error_description||'Não foi possível continuar. Tente de novo.'))}catch(x){msg='Sem conexão. Tente de novo.'}
 draw()},true);
 setTimeout(()=>{if(sess)pull()},0);
+}
+{
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+let ip=null;const stand=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();ip=e;if(tab=='salvar'&&!sub)draw()});
+const _s4=V.salvar;V.salvar=()=>{const s=_s4();if(stand)return s;const i=s.indexOf('</p>')+4,ios=/iphone|ipad|ipod/i.test(navigator.userAgent);return s.slice(0,i)+`<div class="card"><label>Instalar o app</label>${ip?`<button data-a="inst">Instalar o Switch</button>`:ios?`<p>No Safari, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.</p>`:`<p>No menu do navegador (⋮), escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</p>`}</div>`+s.slice(i)};
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-a="inst"]');if(!b||!ip)return;e.stopPropagation();ip.prompt();await ip.userChoice.catch(()=>{});ip=null;draw()},true);
 }
 draw();
 </script>
